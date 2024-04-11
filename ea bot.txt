@@ -1,0 +1,60 @@
+//+------------------------------------------------------------------+
+//|                                                      SimpleMA.mq5 |
+//|                        Copyright 2023, Leo                         |
+//|                                             Brave AI Assistant   |
+//+------------------------------------------------------------------+
+
+// Include the MetaTrader5 header file
+#include <Trade\Trade.mqh>
+
+// Define the input parameters
+input int MA_9_Period = 9;
+input int MA_18_Period = 18;
+input double RiskPerTrade = 0.02; // Risk percentage per trade
+
+// Global variables
+double MA_9;
+double MA_18;
+bool IsBullish = false;
+
+// Start() function - called when the strategy is started
+void OnStart()
+{
+  // Initialize the moving averages
+  MA_9 = iMA(Symbol(), 0, MA_9_Period, 0, MODE_SMA, PRICE_CLOSE, 0);
+  MA_18 = iMA(Symbol(), 0, MA_18_Period, 0, MODE_SMA, PRICE_CLOSE, 0);
+}
+
+// OnTick() function - called at every tick
+void OnTick()
+{
+  // Calculate maximum trade size based on risk and free margin
+  double LotsToTrade = AccountFreeMargin() * RiskPerTrade / SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_VALUE);
+
+  // Update trade size if necessary
+  if (LotsToTrade < Lots) Lots = LotsToTrade;
+
+  // Recalculate moving averages
+  MA_9 = iMA(Symbol(), 0, MA_9_Period, 0, MODE_SMA, PRICE_CLOSE, 0);
+  MA_18 = iMA(Symbol(), 0, MA_18_Period, 0, MODE_SMA, PRICE_CLOSE, 0);
+
+  // Entry Logic (Bearish to Bullish)
+  if (MA_9 < MA_18 && IsBullish == false) {
+    if (OrderSend(Symbol(), OP_BUY, Lots, Ask, 0, 0, 12345) > 0) { // No Take Profit, use trailing stop (replace 0 with Take Profit in pips)
+      IsBullish = true;
+    }
+  }
+
+  // Exit Logic (Bullish to Bearish)
+  if (MA_9 > MA_18 && IsBullish == true) {
+    for (int i = OrdersTotal() - 1; i >= 0; i--) {
+      if (OrderSelect(i, SELECT_BY_POS, MODE_TRAILING_STOP) == true) {
+        if (OrderSymbol() == Symbol() && OrderMagicNumber() == 12345) {
+          OrderClose(OrderTicket(), OP_CLOSE, Lots, Ask, 0); // Close the specific buy order (replace 0 with Stop Loss in pips)
+          IsBullish = false;
+          break;
+        }
+      }
+    }
+  }
+}
